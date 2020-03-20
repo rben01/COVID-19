@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from IPython.display import display  # noqa
+from matplotlib.ticker import ScalarFormatter
 
 ROOT_PATH = Path("..")
 DATA_PATH = ROOT_PATH / "csse_covid_19_data" / "csse_covid_19_time_series"
@@ -49,10 +50,22 @@ df = df[
     & (~df[STATE_COL].str.contains(",").fillna(False))
     & (df[DATE_COL] >= pd.to_datetime("2020-03-10"))
 ]
+# akjdh = (
+#     df.groupby(STATE_COL)
+#     .apply(lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASES_COL].max())
+#     .nlargest(10)
+#     .iloc[-1]
+# )
+# display(akjdh)
 df = df.groupby(STATE_COL).filter(
-    lambda g: g.loc[g[CASE_TYPE_COL] == "Confirmed", CASES_COL].max() >= 200
+    lambda g: g.loc[g[CASE_TYPE_COL] == "Confirmed", CASES_COL].max()
+    >= df.groupby(STATE_COL)
+    .apply(lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASES_COL].max())
+    .nlargest(8)
+    .iloc[-1]
 )
-display(df)
+# display(df)
+# sns.set()
 g = sns.lineplot(
     x=DATE_COL,
     y=CASES_COL,
@@ -61,7 +74,13 @@ g = sns.lineplot(
     style=CASE_TYPE_COL,
     style_order=["Confirmed", "Recovered", "Deaths"],
 )
-plt.xticks(rotation=30)
-plt.gca().set(yscale="log")
+plt.xticks(rotation=45)
+plt.yscale("log", basey=8, nonposy="mask")
+plt.ylim(ymin=1)
+plt.gca().yaxis.set_major_formatter(ScalarFormatter())
+plt.gca().yaxis.set_minor_formatter(ScalarFormatter())
+plt.grid(b=True, which="both", axis="y")
+plt.grid(b=True, which="both", axis="x")
+plt.gcf().set_size_inches((10, 12))
 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
 # %%
