@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from IPython.display import display  # noqa
+from matplotlib.dates import DayLocator
 from matplotlib.ticker import ScalarFormatter
 
 ROOT_PATH = Path("..")
@@ -50,13 +51,6 @@ df = df[
     & (~df[STATE_COL].str.contains(",").fillna(False))
     & (df[DATE_COL] >= pd.to_datetime("2020-03-10"))
 ]
-# akjdh = (
-#     df.groupby(STATE_COL)
-#     .apply(lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASES_COL].max())
-#     .nlargest(10)
-#     .iloc[-1]
-# )
-# display(akjdh)
 df = df.groupby(STATE_COL).filter(
     lambda g: g.loc[g[CASE_TYPE_COL] == "Confirmed", CASES_COL].max()
     >= df.groupby(STATE_COL)
@@ -77,6 +71,7 @@ g = sns.lineplot(
 plt.xticks(rotation=45)
 plt.yscale("log", basey=8, nonposy="mask")
 plt.ylim(ymin=1)
+plt.gca().xaxis.set_minor_locator(DayLocator())
 plt.gca().yaxis.set_major_formatter(ScalarFormatter())
 plt.gca().yaxis.set_minor_formatter(ScalarFormatter())
 plt.grid(b=True, which="both", axis="y")
