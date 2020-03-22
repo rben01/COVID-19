@@ -23,16 +23,18 @@ CASE_TYPE_COL = "Case Type"
 
 
 def plot(df, style=None):
-    style = style or "seaborn-deep"
+    style = style or "default"
     with plt.style.context(style):
         g = sns.lineplot(
             x=DATE_COL,
             y=CASES_COL,
             data=df,
             hue=LOCATION_NAME_COL,
+            # palette="husl",
             style=CASE_TYPE_COL,
             style_order=["Confirmed", "Recovered", "Deaths"],
         )
+        plt.setp(g.lines, linewidth=3)
         plt.xticks(rotation=90)
         plt.yscale("log", basey=8, nonposy="mask")
         plt.ylim(ymin=1)
@@ -41,9 +43,9 @@ def plot(df, style=None):
         plt.gca().yaxis.set_minor_formatter(ScalarFormatter())
         plt.grid(b=True, which="both", axis="y")
         plt.grid(b=True, which="both", axis="x")
-        plt.gcf().set_size_inches((15, 20))
+        plt.gcf().set_size_inches((8, 12))
         plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
-        plt.gcf().patch.set_facecolor("white")
+        # plt.gcf().patch.set_facecolor("white")
 
 
 def get_df(filepath: Path, *, case_type: str):
@@ -85,7 +87,7 @@ df = join_dfs()
 INCLUDED_COUNTRIES = [
     # "China",
     "Italy",
-    # "Iran",
+    "Iran",
     # "United Kingdom",
     "Korea, South",
     "US",
@@ -128,3 +130,4 @@ df = df.merge(
 df = df.sort_values(_SORT_ORDER_COL, ascending=False)
 
 plot(df)
+plt.show()
