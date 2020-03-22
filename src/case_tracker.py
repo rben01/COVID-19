@@ -3,12 +3,12 @@ from pathlib import Path
 from typing import List
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from IPython.display import display  # noqa
 from matplotlib.dates import DayLocator
-from matplotlib.ticker import ScalarFormatter
-
+from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
 ROOT_PATH = Path("..")
 DATA_PATH = ROOT_PATH / "csse_covid_19_data" / "csse_covid_19_time_series"
@@ -36,15 +36,23 @@ def plot(df, style=None):
         )
         plt.setp(g.lines, linewidth=3)
         plt.xticks(rotation=90)
-        plt.yscale("log", basey=8, nonposy="mask")
         plt.ylim(ymin=1)
-        plt.gca().xaxis.set_minor_locator(DayLocator())
-        plt.gca().yaxis.set_major_formatter(ScalarFormatter())
-        plt.gca().yaxis.set_minor_formatter(ScalarFormatter())
+        plt.yscale("log", basey=2, nonposy="mask")
+
+        ax = plt.gca()
+        ax: plt.Axes
+        ax.xaxis.set_minor_locator(DayLocator())
+        ax.yaxis.set_major_locator(LogLocator(base=2, numticks=1000))
+        ax.yaxis.set_major_formatter(ScalarFormatter())
+        ax.yaxis.set_minor_locator(
+            LogLocator(base=2, subs=np.linspace(0.5, 1, 6`), numticks=1000)
+        )
+        ax.yaxis.set_minor_formatter(NullFormatter())
+
         plt.grid(b=True, which="both", axis="y")
         plt.grid(b=True, which="both", axis="x")
-        plt.gcf().set_size_inches((8, 12))
         plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
+        plt.gcf().set_size_inches((8, 12))
         # plt.gcf().patch.set_facecolor("white")
 
 
@@ -79,6 +87,7 @@ def join_dfs():
     china[_COUNTRY_COL] = "China"
     df = pd.concat([df, china], axis=0)
 
+    df[_COUNTRY_COL] = df[_COUNTRY_COL].replace("Korea, South", "South Korea")
     df[LOCATION_NAME_COL] = df[_STATE_COL].fillna(df[_COUNTRY_COL])
     return df
 
@@ -89,7 +98,7 @@ INCLUDED_COUNTRIES = [
     "Italy",
     "Iran",
     # "United Kingdom",
-    "Korea, South",
+    "South Korea",
     "US",
 ]
 
