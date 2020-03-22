@@ -65,6 +65,16 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
 
     hue_order = current_case_counts[LOCATION_NAME_COL]
 
+    case_type_names, dashes = zip(
+        *itertools.compress(
+            *zip(
+                ((CONFIRMED, (1, 0)), True),
+                ((RECOVERED, (3, 2, 1, 2)), include_recovered),
+                ((DEATHS, (1, 1)), True),
+            )
+        )
+    )
+
     style = style or "default"
     with plt.style.context(style):
         # Order locations by decreasing current confirmed case count
@@ -80,18 +90,13 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
             hue_order=hue_order,
             # palette="husl",
             style=CASE_TYPE_COL,
-            style_order=[
-                CONFIRMED,
-                *([RECOVERED] if include_recovered else []),
-                DEATHS,
-            ],
-            dashes=[(1, 0), *([(3, 2, 1, 2)] if include_recovered else []), (1, 1)],
+            style_order=case_type_names,
+            dashes=dashes,
         )
 
         # Configure axes and ticks
         ax = plt.gca()
         ax: plt.Axes
-        ax.set_ylabel("Cases (per location)")
         ax.set_ylim(bottom=1)
         ax.set_yscale("log", basey=2, nonposy="mask")
         ax.xaxis.set_minor_locator(DayLocator())
@@ -105,38 +110,35 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         ax.yaxis.set_minor_formatter(NullFormatter())
 
         # Configure design
+        plt.gcf().set_size_inches((12, 12))
         for line in g.lines:
             line.set_linewidth(3)
         for tick in ax.get_xticklabels():
             tick.set_rotation(80)
-        ax.grid(b=True, which="both", axis="y")
-        ax.grid(b=True, which="both", axis="x")
+        ax.grid(b=True, which="both", axis="both")
         legend = plt.legend(loc="upper left", framealpha=0.9)
 
-        # Add case counts of the different categories to the legend
-        sep_str = "/"
+        # Add case counts of the different categories to the legend (next few blocks)
+        sep_str = " / "
+        left_str = " ("
+        right_str = ")"
+
+        # Add number format to legend title (the first text in the legend)
+        fmt_str = sep_str.join(case_type_names)
+        next(iter(legend.texts)).set_text(f"Location{left_str}{fmt_str}{right_str}")
+
+        # Add case counts to legend labels (first label is title, so skip it)
         case_count_str_cols = [
-            current_case_counts[col].map("{:,}".format)
-            for col in [CONFIRMED, *([RECOVERED] if include_recovered else []), DEATHS]
+            current_case_counts[col].map("{:,}".format) for col in case_type_names
         ]
         labels = (
             current_case_counts[LOCATION_NAME_COL]
-            + " ("
+            + left_str
             + case_count_str_cols[0].str.cat(case_count_str_cols[1:], sep=sep_str)
-            + ")"
+            + right_str
         )
-
-        # Add number format to legend title (the first text in the legend)
-        fmt_str = sep_str.join(
-            [CONFIRMED, *([RECOVERED] if include_recovered else []), DEATHS]
-        )
-        next(iter(legend.texts)).set_text(f"Location ({fmt_str})")
-
-        # Add case counts to legend labels (first label is title, so skip it)
         for text, label in zip(itertools.islice(legend.texts, 1, None), labels):
             text.set_text(label)
-
-        plt.gcf().set_size_inches((12, 12))
 
         # Add worldwide case count to right y axis
         # wwcc_ax = ax.twinx()
