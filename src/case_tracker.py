@@ -1,4 +1,5 @@
 # %%
+import itertools
 from pathlib import Path
 from typing import List
 
@@ -7,46 +8,62 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from IPython.display import display  # noqa
-from matplotlib.dates import DayLocator
+from matplotlib.dates import DayLocator, DateFormatter
 from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
-ROOT_PATH = Path("..")
+from get_worldwide_cases import get_worldwide_case_count
+
+from constants import (
+    ROOT_PATH,
+    LATITUDE_COL,
+    LONGITUDE_COL,
+    STATE_COL,
+    COUNTRY_COL,
+    LOCATION_NAME_COL,
+    DATE_COL,
+    CASE_COUNT_COL,
+    CASE_TYPE_COL,
+)
+
 DATA_PATH = ROOT_PATH / "csse_covid_19_data" / "csse_covid_19_time_series"
 
-STATE_COL = "Province/State"
-COUNTRY_COL = "Country/Region"
-LOCATION_NAME_COL = "Location"
-DATE_COL = "Date"
-CASES_COL = "Cases"
-CASE_TYPE_COL = "Case Type"
 
+def plot(df, *, style=None, start_date=None):
+    worldwide_case_count = get_worldwide_case_count()
 
-def plot(df, style=None):
+    if start_date is not None:
+        df = df[df[DATE_COL] >= pd.Timestamp(start_date)]
+        worldwide_case_count = worldwide_case_count[
+            worldwide_case_count[DATE_COL] >= pd.Timestamp(start_date)
+        ]
+
     style = style or "default"
     with plt.style.context(style):
         # Order locations by decreasing current confirmed case count
         # This is used to keep plot legend in sync with the order of lines on the graph
         # so the location with the most cases is first in the legend and the least is
         # the last
-        hue_order = (
+        current_case_counts = (
             df.groupby(LOCATION_NAME_COL)
             .apply(
                 lambda g: pd.Series(
                     {
                         LOCATION_NAME_COL: g.name,
-                        CASES_COL: g.loc[
-                            g[CASE_TYPE_COL] == "Confirmed", CASES_COL
+                        CASE_COUNT_COL: g.loc[
+                            g[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL
                         ].iloc[-1],
                     }
                 )
             )
-            .sort_values(CASES_COL, ascending=False)[LOCATION_NAME_COL]
+            .sort_values(CASE_COUNT_COL, ascending=False)
         )
 
+        hue_order = current_case_counts[LOCATION_NAME_COL]
+
         g = sns.lineplot(
-            x=DATE_COL,
-            y=CASES_COL,
             data=df,
+            x=DATE_COL,
+            y=CASE_COUNT_COL,
             hue=LOCATION_NAME_COL,
             hue_order=hue_order,
             # palette="husl",
@@ -54,14 +71,14 @@ def plot(df, style=None):
             style_order=["Confirmed", "Recovered", "Deaths"],
         )
 
-        # Y axis setup
-        plt.ylim(ymin=1)
-        plt.yscale("log", basey=2, nonposy="mask")
-
-        # Configure ticks
+        # Configure axes and ticks
         ax = plt.gca()
         ax: plt.Axes
+        ax.set_ylabel("Cases (per location)")
+        ax.set_ylim(bottom=1)
+        ax.set_yscale("log", basey=2, nonposy="mask")
         ax.xaxis.set_minor_locator(DayLocator())
+        ax.xaxis.set_major_formatter(DateFormatter("%b %-d"))
         ax.yaxis.set_major_locator(LogLocator(base=2, numticks=1000))
         ax.yaxis.set_major_formatter(ScalarFormatter())
         ax.yaxis.set_minor_locator(
@@ -71,25 +88,49 @@ def plot(df, style=None):
         ax.yaxis.set_minor_formatter(NullFormatter())
 
         # Configure design
-        plt.setp(g.lines, linewidth=3)
-        plt.xticks(rotation=90)
-        plt.grid(b=True, which="both", axis="y")
-        plt.grid(b=True, which="both", axis="x")
-        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
+        for line in g.lines:
+            line.set_linewidth(3)
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(80)
+        ax.grid(b=True, which="both", axis="y")
+        ax.grid(b=True, which="both", axis="x")
+        legend = plt.legend(loc="upper left", framealpha=0.9)
+        labels = (
+            current_case_counts[LOCATION_NAME_COL]
+            + " ("
+            + current_case_counts[CASE_COUNT_COL].map("{:,}".format)
+            + ")"
+        )
+        # Add case counts to legend labels (first label is title, so skip it)
+        for text, label in zip(itertools.islice(legend.texts, 1, None), labels):
+            text.set_text(label)
+
         plt.gcf().set_size_inches((8, 12))
-        # plt.gcf().patch.set_facecolor("white")
+
+        # Add worldwide case count to right y axis
+        # wwcc_ax = ax.twinx()
+        # wwcc_ax: plt.Axes
+        # wwcc_ax.scatter(
+        #     x=worldwide_case_count[DATE_COL],
+        #     y=worldwide_case_count[CASE_COUNT_COL],
+        #     c="black",
+        #     marker="o",
+        # )
+        # wwcc_ax.set_ylabel("Worldwide Cases")
+
+        # wwcc_ax.set_yscale("log", basey=10, nonposy="mask")
+        # wwcc_ax.yaxis.set_major_formatter(ScalarFormatter())
 
 
 def get_df(filepath: Path, *, case_type: str):
     df = pd.read_csv(filepath)
     df: pd.DataFrame
     df = df.melt(
-        id_vars=[STATE_COL, COUNTRY_COL, "Lat", "Long"],
+        id_vars=[STATE_COL, COUNTRY_COL, LATITUDE_COL, LONGITUDE_COL],
         var_name=DATE_COL,
-        value_name=CASES_COL,
+        value_name=CASE_COUNT_COL,
     )
     df[CASE_TYPE_COL] = case_type
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL])
 
     return df
 
@@ -103,12 +144,13 @@ def join_dfs():
         dfs.append(df)
 
     df = pd.concat(dfs, axis=0)
+    df[DATE_COL] = pd.to_datetime(df[DATE_COL])
 
     # Aggregate cities in China
     china = (
         df[df[COUNTRY_COL] == "China"]
         .groupby([DATE_COL, CASE_TYPE_COL], as_index=False)
-        .agg({"Lat": "first", "Long": "first", CASES_COL: "sum"})
+        .agg({LATITUDE_COL: "first", LONGITUDE_COL: "first", CASE_COUNT_COL: "sum"})
     )
     china[COUNTRY_COL] = "China"
     df = pd.concat([df, china], axis=0)
@@ -139,7 +181,6 @@ df = df[
     df[COUNTRY_COL].isin(INCLUDED_COUNTRIES)
     & ~((df[COUNTRY_COL] == "China") & (df[STATE_COL].notna()))
     & (~df[STATE_COL].str.contains(",").fillna(False))
-    & (df[DATE_COL] >= pd.to_datetime("2020-02-20"))
 ]
 
 
@@ -151,14 +192,16 @@ df = df.groupby(LOCATION_NAME_COL).filter(
     or (g.name == "United Kingdom")
     or (
         # Keep top n US states by current number of confirmed cases
-        g.loc[g[CASE_TYPE_COL] == "Confirmed", CASES_COL].iloc[-1]
+        g.loc[g[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL].iloc[-1]
         >= df[df[COUNTRY_COL] == "US"]
         .groupby(LOCATION_NAME_COL)
-        .apply(lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASES_COL].iloc[-1])
+        .apply(
+            lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL].iloc[-1]
+        )
         .nlargest(7)
         .iloc[-1]
     )
 )
 
-plot(df)
+plot(df, start_date="2020-02-20")
 plt.show()
