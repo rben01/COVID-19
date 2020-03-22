@@ -69,7 +69,7 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         *itertools.compress(
             *zip(
                 ((CONFIRMED, (1, 0)), True),
-                ((RECOVERED, (3, 2, 1, 2)), include_recovered),
+                ((RECOVERED, (3, 3, 1, 3)), include_recovered),
                 ((DEATHS, (1, 1)), True),
             )
         )
@@ -237,5 +237,5 @@ df = df.groupby(LOCATION_NAME_COL).filter(
     )
 )
 
-plot(df, start_date="2020-02-20", include_recovered=False)
+plot(df, start_date="2020-02-20", include_recovered=True)
 plt.show()
