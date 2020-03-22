@@ -8,27 +8,29 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from IPython.display import display  # noqa
-from matplotlib.dates import DayLocator, DateFormatter
+from matplotlib.dates import DateFormatter, DayLocator
 from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
-from get_worldwide_cases import get_worldwide_case_count
-
 from constants import (
-    ROOT_PATH,
-    LATITUDE_COL,
-    LONGITUDE_COL,
-    STATE_COL,
-    COUNTRY_COL,
-    LOCATION_NAME_COL,
-    DATE_COL,
     CASE_COUNT_COL,
     CASE_TYPE_COL,
+    CONFIRMED,
+    COUNTRY_COL,
+    DATE_COL,
+    DEATHS,
+    LATITUDE_COL,
+    LOCATION_NAME_COL,
+    LONGITUDE_COL,
+    RECOVERED,
+    ROOT_PATH,
+    STATE_COL,
 )
+from get_worldwide_cases import get_worldwide_case_count
 
 DATA_PATH = ROOT_PATH / "csse_covid_19_data" / "csse_covid_19_time_series"
 
 
-def plot(df, *, style=None, start_date=None):
+def plot(df, *, style=None, start_date=None, include_recovered=False):
     worldwide_case_count = get_worldwide_case_count()
 
     if start_date is not None:
@@ -37,28 +39,38 @@ def plot(df, *, style=None, start_date=None):
             worldwide_case_count[DATE_COL] >= pd.Timestamp(start_date)
         ]
 
+    if not include_recovered:
+        df = df[df[CASE_TYPE_COL] != RECOVERED]
+        worldwide_case_count = worldwide_case_count[
+            worldwide_case_count[CASE_TYPE_COL] != RECOVERED
+        ]
+
+    current_case_counts = (
+        df.groupby(LOCATION_NAME_COL)
+        .apply(
+            lambda g: pd.Series(
+                {
+                    LOCATION_NAME_COL: g.name,
+                    **{
+                        case_type: g.loc[g[CASE_TYPE_COL] == case_type, CASE_COUNT_COL]
+                        .tail(1)
+                        .sum()
+                        for case_type in [CONFIRMED, RECOVERED, DEATHS]
+                    },
+                }
+            )
+        )
+        .sort_values(CONFIRMED, ascending=False)
+    )
+
+    hue_order = current_case_counts[LOCATION_NAME_COL]
+
     style = style or "default"
     with plt.style.context(style):
         # Order locations by decreasing current confirmed case count
         # This is used to keep plot legend in sync with the order of lines on the graph
         # so the location with the most cases is first in the legend and the least is
         # the last
-        current_case_counts = (
-            df.groupby(LOCATION_NAME_COL)
-            .apply(
-                lambda g: pd.Series(
-                    {
-                        LOCATION_NAME_COL: g.name,
-                        CASE_COUNT_COL: g.loc[
-                            g[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL
-                        ].iloc[-1],
-                    }
-                )
-            )
-            .sort_values(CASE_COUNT_COL, ascending=False)
-        )
-
-        hue_order = current_case_counts[LOCATION_NAME_COL]
 
         g = sns.lineplot(
             data=df,
@@ -68,7 +80,12 @@ def plot(df, *, style=None, start_date=None):
             hue_order=hue_order,
             # palette="husl",
             style=CASE_TYPE_COL,
-            style_order=["Confirmed", "Recovered", "Deaths"],
+            style_order=[
+                CONFIRMED,
+                *([RECOVERED] if include_recovered else []),
+                DEATHS,
+            ],
+            dashes=[(1, 0), *([(3, 2, 1, 2)] if include_recovered else []), (1, 1)],
         )
 
         # Configure axes and ticks
@@ -95,17 +112,31 @@ def plot(df, *, style=None, start_date=None):
         ax.grid(b=True, which="both", axis="y")
         ax.grid(b=True, which="both", axis="x")
         legend = plt.legend(loc="upper left", framealpha=0.9)
+
+        # Add case counts of the different categories to the legend
+        sep_str = "/"
+        case_count_str_cols = [
+            current_case_counts[col].map("{:,}".format)
+            for col in [CONFIRMED, *([RECOVERED] if include_recovered else []), DEATHS]
+        ]
         labels = (
             current_case_counts[LOCATION_NAME_COL]
             + " ("
-            + current_case_counts[CASE_COUNT_COL].map("{:,}".format)
+            + case_count_str_cols[0].str.cat(case_count_str_cols[1:], sep=sep_str)
             + ")"
         )
+
+        # Add number format to legend title (the first text in the legend)
+        fmt_str = sep_str.join(
+            [CONFIRMED, *([RECOVERED] if include_recovered else []), DEATHS]
+        )
+        next(iter(legend.texts)).set_text(f"Location ({fmt_str})")
+
         # Add case counts to legend labels (first label is title, so skip it)
         for text, label in zip(itertools.islice(legend.texts, 1, None), labels):
             text.set_text(label)
 
-        plt.gcf().set_size_inches((8, 12))
+        plt.gcf().set_size_inches((12, 12))
 
         # Add worldwide case count to right y axis
         # wwcc_ax = ax.twinx()
@@ -146,14 +177,17 @@ def join_dfs():
     df = pd.concat(dfs, axis=0)
     df[DATE_COL] = pd.to_datetime(df[DATE_COL])
 
-    # Aggregate cities in China
-    china = (
-        df[df[COUNTRY_COL] == "China"]
-        .groupby([DATE_COL, CASE_TYPE_COL], as_index=False)
+    # Remove cities in US (eg New York, NY)
+    df = df[~df[STATE_COL].str.contains(",").fillna(False)]
+
+    # Aggregate cities/province/states in select countries
+    agg_country_df = (
+        df[df[COUNTRY_COL].isin(["China", "US"])]
+        .groupby([DATE_COL, CASE_TYPE_COL, COUNTRY_COL], as_index=False)
         .agg({LATITUDE_COL: "first", LONGITUDE_COL: "first", CASE_COUNT_COL: "sum"})
     )
-    china[COUNTRY_COL] = "China"
-    df = pd.concat([df, china], axis=0)
+
+    df = pd.concat([df, agg_country_df], axis=0)
 
     df[COUNTRY_COL] = df[COUNTRY_COL].replace("Korea, South", "South Korea")
 
@@ -171,6 +205,8 @@ INCLUDED_COUNTRIES = [
     # "China",
     "Italy",
     "Iran",
+    "Spain",
+    "Germany",
     # "United Kingdom",
     "South Korea",
     "US",
@@ -180,9 +216,7 @@ INCLUDED_COUNTRIES = [
 df = df[
     df[COUNTRY_COL].isin(INCLUDED_COUNTRIES)
     & ~((df[COUNTRY_COL] == "China") & (df[STATE_COL].notna()))
-    & (~df[STATE_COL].str.contains(",").fillna(False))
 ]
-
 
 df = df.groupby(LOCATION_NAME_COL).filter(
     # Exclude US states (unless they meet certain criteria, see below) and
@@ -192,16 +226,14 @@ df = df.groupby(LOCATION_NAME_COL).filter(
     or (g.name == "United Kingdom")
     or (
         # Keep top n US states by current number of confirmed cases
-        g.loc[g[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL].iloc[-1]
-        >= df[df[COUNTRY_COL] == "US"]
+        g.loc[g[CASE_TYPE_COL] == CONFIRMED, CASE_COUNT_COL].iloc[-1]
+        >= df[(df[COUNTRY_COL] == "US") & (df[LOCATION_NAME_COL] != "US")]
         .groupby(LOCATION_NAME_COL)
-        .apply(
-            lambda h: h.loc[h[CASE_TYPE_COL] == "Confirmed", CASE_COUNT_COL].iloc[-1]
-        )
-        .nlargest(7)
+        .apply(lambda h: h.loc[h[CASE_TYPE_COL] == CONFIRMED, CASE_COUNT_COL].iloc[-1])
+        .nlargest(4)
         .iloc[-1]
     )
 )
 
-plot(df, start_date="2020-02-20")
+plot(df, start_date="2020-02-20", include_recovered=False)
 plt.show()

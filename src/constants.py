@@ -9,3 +9,7 @@ LOCATION_NAME_COL = "Location"
 DATE_COL = "Date"
 CASE_COUNT_COL = "Cases"
 CASE_TYPE_COL = "Case Type"
+
+CONFIRMED = "Confirmed"
+RECOVERED = "Recovered"
+DEATHS = "Deaths"
