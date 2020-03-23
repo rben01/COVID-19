@@ -131,7 +131,7 @@ def _plot_helper(
             text.set_text(label)
 
 
-def plot_world_and_china(df, *, style=None, start_date=None):
+def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
     def filter_func(df):
         return df[
             df[Columns.LOCATION_NAME].isin(
@@ -154,7 +154,12 @@ def plot_world_and_china(df, *, style=None, start_date=None):
 
 
 def plot_countries(
-    df, countries, *, style=None, start_date=None, include_recovered=False
+    df: pd.DataFrame,
+    countries: List[str],
+    *,
+    style=None,
+    start_date=None,
+    include_recovered=False,
 ):
     def filter_func(df):
         return df[
