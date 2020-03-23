@@ -3,6 +3,7 @@ import itertools
 from collections import namedtuple
 from pathlib import Path
 from typing import List, Tuple
+from datetime import datetime, timezone
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -99,6 +100,8 @@ def _plot_helper(
         fig = plt.gcf()
         fig.set_size_inches(plot_size)
         fig.set_facecolor("white")
+        now_str = datetime.now(timezone.utc).strftime(r"%b %-d, %Y at %H:%M UTC")
+        ax.set_title(f"Last updated {now_str}", loc="right")
 
         for line in g.lines:
             line.set_linewidth(3)
@@ -149,7 +152,7 @@ def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
         CaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1)),
     ]
 
-    plot_size = (9, 9)
+    plot_size = (12, 12)
 
     return _plot_helper(
         df, style=style, case_type_config_list=configs, plot_size=plot_size
@@ -314,6 +317,7 @@ df = df.groupby(Columns.LOCATION_NAME).filter(
 )
 
 
+plot_world_and_china(df, start_date="2020-1-1")
 plot_countries(
     df,
     [
@@ -331,8 +335,4 @@ plot_countries(
     include_recovered=False,
 )
 
-plot_world_and_china(df, start_date="2020-1-1")
-
 plt.show()
-
-# [[%%
