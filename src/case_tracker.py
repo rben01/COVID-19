@@ -1,5 +1,6 @@
 # %%
 import itertools
+from collections import namedtuple
 from pathlib import Path
 from typing import List
 
@@ -46,34 +47,36 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         ]
 
     current_case_counts = (
-        df.groupby(LOCATION_NAME_COL)
-        .apply(
+        df.groupby(LOCATION_NAME_COL).apply(
             lambda g: pd.Series(
                 {
                     LOCATION_NAME_COL: g.name,
-                    **{
-                        case_type: g.loc[g[CASE_TYPE_COL] == case_type, CASE_COUNT_COL]
-                        .tail(1)
-                        .sum()
-                        for case_type in [CONFIRMED, RECOVERED, DEATHS]
-                    },
+                    **g.groupby(CASE_TYPE_COL)[CASE_COUNT_COL]
+                    .apply(lambda h: h.tail(1).sum())
+                    .to_dict(),
                 }
             )
         )
-        .sort_values(CONFIRMED, ascending=False)
+        # .sort_values(CONFIRMED, ascending=False)
     )
 
     hue_order = current_case_counts[LOCATION_NAME_COL]
 
-    case_type_names, dashes = zip(
-        *itertools.compress(
-            *zip(
-                ((CONFIRMED, (1, 0)), True),
-                ((RECOVERED, (3, 3, 1, 3)), include_recovered),
-                ((DEATHS, (1, 1)), True),
-            )
-        )
+    CASE_TYPE_NAMES = "name"
+    DASH_STYLE = "dash_style"
+    INCLUDE = "include"
+    PerCaseTypeConfig = namedtuple(
+        "PerCaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE]
     )
+    config = [
+        PerCaseTypeConfig(name=CONFIRMED, dash_style=(1, 0), include=True),
+        PerCaseTypeConfig(
+            name=RECOVERED, dash_style=(3, 3, 1, 3), include=include_recovered,
+        ),
+        PerCaseTypeConfig(name=DEATHS, dash_style=(1, 1), include=True),
+    ]
+    config_df = pd.DataFrame(config)
+    config_df = config_df[config_df[INCLUDE]]
 
     style = style or "default"
     with plt.style.context(style):
@@ -90,8 +93,8 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
             hue_order=hue_order,
             # palette="husl",
             style=CASE_TYPE_COL,
-            style_order=case_type_names,
-            dashes=dashes,
+            style_order=config_df[CASE_TYPE_NAMES].tolist(),
+            dashes=config_df[DASH_STYLE].tolist(),
         )
 
         # Configure axes and ticks
@@ -124,12 +127,13 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         right_str = ")"
 
         # Add number format to legend title (the first text in the legend)
-        fmt_str = sep_str.join(case_type_names)
+        fmt_str = sep_str.join(config_df[CASE_TYPE_NAMES])
         next(iter(legend.texts)).set_text(f"Location{left_str}{fmt_str}{right_str}")
 
         # Add case counts to legend labels (first label is title, so skip it)
         case_count_str_cols = [
-            current_case_counts[col].map("{:,}".format) for col in case_type_names
+            current_case_counts[col].map("{:,}".format)
+            for col in config_df[CASE_TYPE_NAMES]
         ]
         labels = (
             current_case_counts[LOCATION_NAME_COL]
@@ -171,7 +175,7 @@ def get_df(filepath: Path, *, case_type: str):
 def join_dfs():
     dfs = []
     dfs: List[pd.DataFrame]
-    for csv in DATA_PATH.glob("*.csv"):
+    for csv in DATA_PATH.glob("time_series_19*.csv"):
         case_type = csv.stem.replace("time_series_19-covid-", "")
         df = get_df(csv, case_type=case_type)
         dfs.append(df)
@@ -237,5 +241,5 @@ df = df.groupby(LOCATION_NAME_COL).filter(
     )
 )
 
-plot(df, start_date="2020-02-20", include_recovered=True)
+plot(df, start_date="2020-02-20", include_recovered=False)
 plt.show()
