@@ -23,7 +23,9 @@ class CaseTypes:
     MORTALITY = "Mortality"
 
 
-class Strings:
+class Locations:
     WORLD = "World"
     WORLD_MINUS_CHINA = "Non-China"
     CHINA = "China"
+    US = "US"
+    UK = "United Kingdom"

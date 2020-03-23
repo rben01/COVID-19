@@ -12,15 +12,15 @@ from IPython.display import display  # noqa
 from matplotlib.dates import DateFormatter, DayLocator
 from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
-from constants import CaseTypes, Columns, Paths, Strings
+from constants import CaseTypes, Columns, Paths, Locations
 
 DATA_PATH = Paths.ROOT / "csse_covid_19_data" / "csse_covid_19_time_series"
 
 CASE_TYPE_NAMES = "name"
 DASH_STYLE = "dash_style"
 INCLUDE = "include"
-PerCaseTypeConfig = namedtuple(
-    "PerCaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE]
+CaseTypeConfig = namedtuple(
+    "CaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE], defaults=[True]
 )
 
 
@@ -28,14 +28,11 @@ def _plot_helper(
     df: pd.DataFrame,
     *,
     style=None,
-    filter_df_func,
     palette=None,
-    config: List[PerCaseTypeConfig],
+    case_type_config_list: List[CaseTypeConfig],
     plot_size: Tuple[float],
 ):
     plt.subplots()
-
-    df = filter_df_func(df)
 
     current_case_counts = (
         df.groupby(Columns.LOCATION_NAME).apply(
@@ -61,9 +58,8 @@ def _plot_helper(
 
     hue_order = current_case_counts[Columns.LOCATION_NAME]
 
-    config_df = pd.DataFrame(config)
+    config_df = pd.DataFrame(case_type_config_list)
     config_df = config_df[config_df[INCLUDE]]
-    legend_fields = [*config_df[CASE_TYPE_NAMES], CaseTypes.MORTALITY]
 
     style = style or "default"
     with plt.style.context(style):
@@ -80,12 +76,16 @@ def _plot_helper(
         )
 
         # Configure axes and ticks
-        ax = plt.gca()
         ax: plt.Axes
-        ax.set_ylim(bottom=1)
-        ax.set_yscale("log", basey=2, nonposy="mask")
+        ax = plt.gca()
+        # X axis
         ax.xaxis.set_minor_locator(DayLocator())
         ax.xaxis.set_major_formatter(DateFormatter("%b %-d"))
+        for tick in ax.get_xticklabels():
+            tick.set_rotation(80)
+        # Y axis
+        ax.set_ylim(bottom=1)
+        ax.set_yscale("log", basey=2, nonposy="mask")
         ax.yaxis.set_major_locator(LogLocator(base=2, numticks=1000))
         ax.yaxis.set_major_formatter(ScalarFormatter())
         ax.yaxis.set_minor_locator(
@@ -94,24 +94,28 @@ def _plot_helper(
         )
         ax.yaxis.set_minor_formatter(NullFormatter())
 
-        # Configure design
-        plt.gcf().set_size_inches(plot_size)
+        # Configure plot design
+        fig: plt.Figure
+        fig = plt.gcf()
+        fig.set_size_inches(plot_size)
+        fig.set_facecolor("white")
+
         for line in g.lines:
             line.set_linewidth(3)
-        for tick in ax.get_xticklabels():
-            tick.set_rotation(80)
         ax.grid(b=True, which="both", axis="both")
-        legend = plt.legend(loc="best", framealpha=0.9)
-        plt.gcf().set_facecolor("white")
 
         # Add case counts of the different categories to the legend (next few blocks)
+        legend = plt.legend(loc="best", framealpha=0.9)
         sep_str = " / "
         left_str = " ("
         right_str = ")"
 
-        # Add number format to legend title (the first text in the legend)
+        # Add number format to legend title (the first item in the legend)
+        legend_fields = [*config_df[CASE_TYPE_NAMES], CaseTypes.MORTALITY]
         fmt_str = sep_str.join(legend_fields)
-        next(iter(legend.texts)).set_text(f"Location{left_str}{fmt_str}{right_str}")
+        next(iter(legend.texts)).set_text(
+            f"{Columns.LOCATION_NAME}{left_str}{fmt_str}{right_str}"
+        )
 
         # Add case counts to legend labels (first label is title, so skip it)
         case_count_str_cols = [
@@ -132,24 +136,23 @@ def _plot_helper(
 
 
 def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
-    def filter_func(df):
-        return df[
-            df[Columns.LOCATION_NAME].isin(
-                [Strings.WORLD, Strings.WORLD_MINUS_CHINA, "China"]
-            )
-            & (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED)
-            & (df[Columns.DATE] >= pd.Timestamp(start_date))
-        ]
+    df = df[
+        df[Columns.LOCATION_NAME].isin(
+            [Locations.WORLD, Locations.WORLD_MINUS_CHINA, Locations.CHINA]
+        )
+        & (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED)
+        & (df[Columns.DATE] >= pd.Timestamp(start_date))
+    ]
 
-    config = [
-        PerCaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0), include=True),
-        PerCaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1), include=True),
+    configs = [
+        CaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0)),
+        CaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1)),
     ]
 
     plot_size = (9, 9)
 
     return _plot_helper(
-        df, style=style, filter_df_func=filter_func, config=config, plot_size=plot_size
+        df, style=style, case_type_config_list=configs, plot_size=plot_size
     )
 
 
@@ -161,28 +164,25 @@ def plot_countries(
     start_date=None,
     include_recovered=False,
 ):
-    def filter_func(df):
-        return df[
-            df[Columns.COUNTRY].isin(countries)
-            & (df[Columns.DATE] >= pd.Timestamp(start_date))
-            & (include_recovered | (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED))
-        ]
+    df = df[
+        df[Columns.COUNTRY].isin(countries)
+        & (df[Columns.DATE] >= pd.Timestamp(start_date))
+        & (include_recovered | (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED))
+    ]
 
-    config = [
-        PerCaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0), include=True),
-        PerCaseTypeConfig(
+    configs = [
+        CaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0)),
+        CaseTypeConfig(
             name=CaseTypes.RECOVERED,
             dash_style=(3, 3, 1, 3),
             include=include_recovered,
         ),
-        PerCaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1), include=True),
+        CaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1)),
     ]
 
     plot_size = (12, 12)
 
-    _plot_helper(
-        df, style=style, filter_df_func=filter_func, config=config, plot_size=plot_size
-    )
+    _plot_helper(df, style=style, case_type_config_list=configs, plot_size=plot_size)
 
 
 def get_country_cases_df(filepath: Path, *, case_type: str):
@@ -209,7 +209,7 @@ def get_world_cases_df(filepath: Path, *, case_type: str):
     world_df = df.groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT].sum()
 
     china_df = (
-        df[df[Columns.COUNTRY] == "China"]
+        df[df[Columns.COUNTRY] == Locations.CHINA]
         .groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT]
         .sum()
     )
@@ -219,15 +219,15 @@ def get_world_cases_df(filepath: Path, *, case_type: str):
     world_df = world_df.reset_index()
     world_minus_china_df = world_minus_china_df.reset_index()
 
-    world_df[Columns.COUNTRY] = Strings.WORLD
-    world_minus_china_df[Columns.COUNTRY] = Strings.WORLD_MINUS_CHINA
+    world_df[Columns.COUNTRY] = Locations.WORLD
+    world_minus_china_df[Columns.COUNTRY] = Locations.WORLD_MINUS_CHINA
 
     df = pd.concat([world_df, world_minus_china_df], axis=0)
 
     return df
 
 
-def join_dfs():
+def join_dfs() -> pd.DataFrame:
     dfs = []
     dfs: List[pd.DataFrame]
 
@@ -248,7 +248,7 @@ def join_dfs():
 
     # Aggregate cities/province/states in select countries
     agg_country_df = (
-        df[df[Columns.COUNTRY].isin(["China", "US"])]
+        df[df[Columns.COUNTRY].isin([Locations.CHINA, Locations.US])]
         .groupby([Columns.DATE, Columns.CASE_TYPE, Columns.COUNTRY], as_index=False)
         .agg(
             {
@@ -284,26 +284,30 @@ def join_dfs():
     return df
 
 
+def get_n_largest_US_states(df, n):
+    return (
+        df[
+            (df[Columns.COUNTRY] == "US")
+            & (df[Columns.LOCATION_NAME] != "US")
+            & (df[Columns.CASE_TYPE] == CaseTypes.CONFIRMED)
+        ]
+        .groupby(Columns.LOCATION_NAME)
+        .apply(lambda g: g[Columns.CASE_COUNT].iloc[-1])
+        .nlargest(n)
+        .rename(CaseTypes.CONFIRMED)
+    )
+
+
 df = join_dfs()
+largest_US_states = get_n_largest_US_states(df, 3)
 
 df = df.groupby(Columns.LOCATION_NAME).filter(
     # Exclude US states (unless they meet certain criteria, see below) and
-    # UK's discontiguous regions (e.g., Isle of Man, Gibraltar)
-    lambda g: g[Columns.COUNTRY].iloc[0] not in ["US", "United Kingdom"]
-    # Keep UK the country
-    or (g.name == "United Kingdom")  # g.name is LOCATION_NAME
+    lambda g: g[Columns.COUNTRY].iloc[0] != Locations.US
     or (
         # Keep top n US states by current number of confirmed cases
         g.loc[g[Columns.CASE_TYPE] == CaseTypes.CONFIRMED, Columns.CASE_COUNT].iloc[-1]
-        >= df[(df[Columns.COUNTRY] == "US") & (df[Columns.LOCATION_NAME] != "US")]
-        .groupby(Columns.LOCATION_NAME)
-        .apply(
-            lambda h: h.loc[
-                h[Columns.CASE_TYPE] == CaseTypes.CONFIRMED, Columns.CASE_COUNT
-            ].iloc[-1]
-        )
-        .nlargest(3)
-        .iloc[-1]
+        >= largest_US_states.iloc[-1]
     )
 )
 
