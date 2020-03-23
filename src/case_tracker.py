@@ -47,17 +47,21 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         ]
 
     current_case_counts = (
-        df.groupby(LOCATION_NAME_COL)
-        .apply(
+        df.groupby(LOCATION_NAME_COL).apply(
             lambda g: pd.Series(
                 {
                     LOCATION_NAME_COL: g.name,
+                    # Get last case count of each case type for each location
                     **g.groupby(CASE_TYPE_COL)[CASE_COUNT_COL]
-                    .apply(lambda h: h.tail(1).sum())
-                    .to_dict(),
+                    # .tail(1).sum() is a hack to get the last value if it exists else 0
+                    .apply(lambda h: h.tail(1).sum()).to_dict(),
                 }
             )
         )
+        # Order locations by decreasing current confirmed case count
+        # This is used to keep plot legend in sync with the order of lines on the graph
+        # so the location with the most current cases is first in the legend and the
+        # least is last
         .sort_values(CONFIRMED, ascending=False)
     )
 
@@ -81,21 +85,16 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
 
     style = style or "default"
     with plt.style.context(style):
-        # Order locations by decreasing current confirmed case count
-        # This is used to keep plot legend in sync with the order of lines on the graph
-        # so the location with the most cases is first in the legend and the least is
-        # the last
-
         g = sns.lineplot(
             data=df,
             x=DATE_COL,
             y=CASE_COUNT_COL,
             hue=LOCATION_NAME_COL,
             hue_order=hue_order,
-            # palette="husl",
             style=CASE_TYPE_COL,
             style_order=config_df[CASE_TYPE_NAMES].tolist(),
             dashes=config_df[DASH_STYLE].tolist(),
+            palette=None,
         )
 
         # Configure axes and ticks
@@ -212,6 +211,7 @@ INCLUDED_COUNTRIES = [
     # "China",
     "Italy",
     "Iran",
+    "France",
     "Spain",
     "Germany",
     # "United Kingdom",
@@ -222,7 +222,13 @@ INCLUDED_COUNTRIES = [
 
 df = df[
     df[COUNTRY_COL].isin(INCLUDED_COUNTRIES)
-    & ~((df[COUNTRY_COL] == "China") & (df[STATE_COL].notna()))
+    # For countries other than the US, don't include their states/discontiguous regions
+    # E.g., Gibraltar, Isle of Man, French Polynesia, etc
+    & (
+        (df[COUNTRY_COL] == "US")
+        | (df[STATE_COL] == df[COUNTRY_COL])  # France is like this, idk why
+        | df[STATE_COL].isna()
+    )
 ]
 
 df = df.groupby(LOCATION_NAME_COL).filter(
@@ -237,7 +243,7 @@ df = df.groupby(LOCATION_NAME_COL).filter(
         >= df[(df[COUNTRY_COL] == "US") & (df[LOCATION_NAME_COL] != "US")]
         .groupby(LOCATION_NAME_COL)
         .apply(lambda h: h.loc[h[CASE_TYPE_COL] == CONFIRMED, CASE_COUNT_COL].iloc[-1])
-        .nlargest(4)
+        .nlargest(3)
         .iloc[-1]
     )
 )
