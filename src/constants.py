@@ -27,7 +27,7 @@ class Locations:
     WORLD = "World"
     WORLD_MINUS_CHINA = "Non-China"
     CHINA = "China"
-    US = "US"
+    USA = "US"
     UK = "United Kingdom"
     ITALY = "Italy"
     GERMANY = "Germany"

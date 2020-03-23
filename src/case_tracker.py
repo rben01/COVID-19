@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from IPython.display import display  # noqa
+from IPython.display import display  # noqa F401
 from matplotlib.dates import DateFormatter, DayLocator
 from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
@@ -207,12 +207,16 @@ def get_country_cases_df(filepath: Path, *, case_type: str):
 
 def get_world_cases_df(filepath: Path, *, case_type: str):
     df = get_country_cases_df(filepath, case_type=case_type)
-    df = df.drop(columns=[Columns.LATITUDE, Columns.LONGITUDE])
 
-    world_df = df.groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT].sum()
+    world_df = (
+        df.drop(columns=[Columns.LATITUDE, Columns.LONGITUDE])
+        .groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT]
+        .sum()
+    )
 
     china_df = (
         df[df[Columns.COUNTRY] == Locations.CHINA]
+        .drop(columns=[Columns.LATITUDE, Columns.LONGITUDE])
         .groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT]
         .sum()
     )
@@ -220,12 +224,14 @@ def get_world_cases_df(filepath: Path, *, case_type: str):
     world_minus_china_df = world_df.sub(china_df)
 
     world_df = world_df.reset_index()
+    china_df = china_df.reset_index()
     world_minus_china_df = world_minus_china_df.reset_index()
 
     world_df[Columns.COUNTRY] = Locations.WORLD
+    china_df[Columns.COUNTRY] = Locations.CHINA
     world_minus_china_df[Columns.COUNTRY] = Locations.WORLD_MINUS_CHINA
 
-    df = pd.concat([world_df, world_minus_china_df], axis=0)
+    df = pd.concat([df, world_df, china_df, world_minus_china_df], axis=0)
 
     return df
 
@@ -234,11 +240,18 @@ def join_dfs() -> pd.DataFrame:
     dfs = []
     dfs: List[pd.DataFrame]
 
+    # Use this for US states only
     for csv in DATA_PATH.glob("time_series_19*.csv"):
         case_type = csv.stem.replace("time_series_19-covid-", "")
         df = get_country_cases_df(csv, case_type=case_type)
+        df = df[
+            (df[Columns.COUNTRY] == Locations.USA)
+            & (df[Columns.STATE].notna())
+            & (df[Columns.STATE] != Locations.USA)
+        ]
         dfs.append(df)
 
+    # Use this for countries
     for csv in DATA_PATH.glob("time_series_covid19_*_global.csv"):
         case_type = csv.stem.replace("time_series_covid19_", "").replace("_global", "")
         df = get_world_cases_df(csv, case_type=case_type)
@@ -248,21 +261,6 @@ def join_dfs() -> pd.DataFrame:
 
     # Remove cities in US (eg "New York, NY")
     df = df[~df[Columns.STATE].str.contains(",").fillna(False)]
-
-    # Aggregate cities/province/states in select countries
-    agg_country_df = (
-        df[df[Columns.COUNTRY].isin([Locations.CHINA, Locations.US])]
-        .groupby([Columns.DATE, Columns.CASE_TYPE, Columns.COUNTRY], as_index=False)
-        .agg(
-            {
-                Columns.LATITUDE: "first",
-                Columns.LONGITUDE: "first",
-                Columns.CASE_COUNT: "sum",
-            }
-        )
-    )
-
-    df = pd.concat([df, agg_country_df], axis=0)
 
     # For countries other than the US, don't include their states/discontiguous regions
     # E.g., Gibraltar, Isle of Man, French Polynesia, etc
@@ -309,7 +307,7 @@ largest_US_states = get_n_largest_US_states(df, 2)
 df = df.groupby(Columns.LOCATION_NAME).filter(
     # Exclude smaller US states;
     # keep top n US states by current number of confirmed cases
-    lambda g: g[Columns.COUNTRY].iloc[0] != Locations.US
+    lambda g: g[Columns.COUNTRY].iloc[0] != Locations.USA
     or (
         g.loc[g[Columns.CASE_TYPE] == CaseTypes.CONFIRMED, Columns.CASE_COUNT].iloc[-1]
         >= largest_US_states.min()
@@ -329,7 +327,7 @@ plot_countries(
         Locations.IRAN,
         Locations.UK,
         Locations.SOUTH_KOREA,
-        Locations.US,
+        Locations.USA,
     ],
     start_date="2020-2-20",
     include_recovered=False,
