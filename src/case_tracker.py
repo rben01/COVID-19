@@ -188,7 +188,7 @@ def plot_countries(
 def get_country_cases_df(filepath: Path, *, case_type: str):
     case_type = case_type.title()
 
-    df = pd.read_csv(filepath)
+    df = pd.read_csv(filepath, dtype=str)
     df: pd.DataFrame
     df = df.melt(
         id_vars=[Columns.STATE, Columns.COUNTRY, Columns.LATITUDE, Columns.LONGITUDE],
@@ -197,6 +197,7 @@ def get_country_cases_df(filepath: Path, *, case_type: str):
     )
     df[Columns.DATE] = pd.to_datetime(df[Columns.DATE])
     df[Columns.CASE_TYPE] = case_type
+    df[Columns.CASE_COUNT] = df[Columns.CASE_COUNT].str.replace(",", "").astype(int)
 
     return df
 
@@ -212,6 +213,7 @@ def get_world_cases_df(filepath: Path, *, case_type: str):
         .groupby([Columns.DATE, Columns.CASE_TYPE])[Columns.CASE_COUNT]
         .sum()
     )
+
     world_minus_china_df = world_df.sub(china_df)
 
     world_df = world_df.reset_index()
