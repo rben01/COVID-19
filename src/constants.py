@@ -3,6 +3,7 @@ from pathlib import Path
 
 class Paths:
     ROOT = Path("..")
+    FIGURES = ROOT / "Figures"
 
 
 class Columns:

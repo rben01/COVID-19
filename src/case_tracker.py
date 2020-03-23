@@ -32,8 +32,9 @@ def _plot_helper(
     palette=None,
     case_type_config_list: List[CaseTypeConfig],
     plot_size: Tuple[float],
+    filename,
 ):
-    plt.subplots()
+    plt.subplots(figsize=plot_size, dpi=400, facecolor="white")
 
     current_case_counts = (
         df.groupby(Columns.LOCATION_NAME).apply(
@@ -96,10 +97,6 @@ def _plot_helper(
         ax.yaxis.set_minor_formatter(NullFormatter())
 
         # Configure plot design
-        fig: plt.Figure
-        fig = plt.gcf()
-        fig.set_size_inches(plot_size)
-        fig.set_facecolor("white")
         now_str = datetime.now(timezone.utc).strftime(r"%b %-d, %Y at %H:%M UTC")
         ax.set_title(f"Last updated {now_str}", loc="right")
 
@@ -137,6 +134,11 @@ def _plot_helper(
         for text, label in zip(itertools.islice(legend.texts, 1, None), labels):
             text.set_text(label)
 
+        # Save
+        fig: plt.Figure
+        fig = plt.gcf()
+        fig.savefig(Paths.FIGURES / filename, bbox_inches="tight")
+
 
 def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
     df = df[
@@ -153,9 +155,14 @@ def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
     ]
 
     plot_size = (12, 12)
+    savefile_name = "world.png"
 
     return _plot_helper(
-        df, style=style, case_type_config_list=configs, plot_size=plot_size
+        df,
+        style=style,
+        case_type_config_list=configs,
+        plot_size=plot_size,
+        filename=savefile_name,
     )
 
 
@@ -184,8 +191,15 @@ def plot_countries(
     ]
 
     plot_size = (12, 12)
+    savefile_name = "countries.png"
 
-    _plot_helper(df, style=style, case_type_config_list=configs, plot_size=plot_size)
+    _plot_helper(
+        df,
+        style=style,
+        case_type_config_list=configs,
+        plot_size=plot_size,
+        filename=savefile_name,
+    )
 
 
 def get_country_cases_df(filepath: Path, *, case_type: str):
