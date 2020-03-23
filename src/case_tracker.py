@@ -47,7 +47,8 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         ]
 
     current_case_counts = (
-        df.groupby(LOCATION_NAME_COL).apply(
+        df.groupby(LOCATION_NAME_COL)
+        .apply(
             lambda g: pd.Series(
                 {
                     LOCATION_NAME_COL: g.name,
@@ -57,7 +58,7 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
                 }
             )
         )
-        # .sort_values(CONFIRMED, ascending=False)
+        .sort_values(CONFIRMED, ascending=False)
     )
 
     hue_order = current_case_counts[LOCATION_NAME_COL]
@@ -113,7 +114,7 @@ def plot(df, *, style=None, start_date=None, include_recovered=False):
         ax.yaxis.set_minor_formatter(NullFormatter())
 
         # Configure design
-        plt.gcf().set_size_inches((12, 12))
+        plt.gcf().set_size_inches((10, 10))
         for line in g.lines:
             line.set_linewidth(3)
         for tick in ax.get_xticklabels():
@@ -241,5 +242,5 @@ df = df.groupby(LOCATION_NAME_COL).filter(
     )
 )
 
-plot(df, start_date="2020-02-20", include_recovered=False)
+plot(df, start_date="2020-2-20", include_recovered=False)
 plt.show()
