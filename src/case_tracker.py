@@ -43,6 +43,13 @@ def _plot_helper(
     fig: plt.Figure
     ax: plt.Axes
 
+    start_date = df.loc[
+        (df[Columns.CASE_TYPE] == CaseTypes.CONFIRMED) & (df[Columns.CASE_COUNT] > 0),
+        Columns.DATE,
+    ].iloc[0]
+
+    df = df[df[Columns.DATE] >= start_date]
+
     current_case_counts = (
         df.groupby(Columns.LOCATION_NAME).apply(
             lambda g: pd.Series(
