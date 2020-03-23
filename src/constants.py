@@ -1,15 +1,27 @@
 from pathlib import Path
 
-ROOT_PATH = Path("..")
-LATITUDE_COL = "Lat"
-LONGITUDE_COL = "Long"
-STATE_COL = "Province/State"
-COUNTRY_COL = "Country/Region"
-LOCATION_NAME_COL = "Location"
-DATE_COL = "Date"
-CASE_COUNT_COL = "Cases"
-CASE_TYPE_COL = "Case Type"
 
-CONFIRMED = "Confirmed"
-RECOVERED = "Recovered"
-DEATHS = "Deaths"
+class Paths:
+    ROOT = Path("..")
+
+
+class Columns:
+    LATITUDE = "Lat"
+    LONGITUDE = "Long"
+    STATE = "Province/State"
+    COUNTRY = "Country/Region"
+    LOCATION_NAME = "Location"
+    DATE = "Date"
+    CASE_COUNT = "Cases"
+    CASE_TYPE = "Case Type"
+
+
+class CaseTypes:
+    CONFIRMED = "Confirmed"
+    RECOVERED = "Recovered"
+    DEATHS = "Deaths"
+    MORTALITY = "Mortality"
+
+
+class Strings:
+    WORLD = "World"
