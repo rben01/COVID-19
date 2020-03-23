@@ -12,6 +12,7 @@ class Columns:
     STATE = "Province/State"
     COUNTRY = "Country/Region"
     LOCATION_NAME = "Location"
+    IS_STATE = "Is State"
     DATE = "Date"
     CASE_COUNT = "Cases"
     CASE_TYPE = "Case Type"
