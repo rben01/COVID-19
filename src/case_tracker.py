@@ -270,7 +270,9 @@ def join_dfs() -> pd.DataFrame:
     ]
 
     # Minor cleanup
-    df[Columns.COUNTRY] = df[Columns.COUNTRY].replace("Korea, South", "South Korea")
+    df[Columns.COUNTRY] = df[Columns.COUNTRY].replace(
+        "Korea, South", Locations.SOUTH_KOREA
+    )
     df.loc[
         df[Columns.COUNTRY] == "Georgia", Columns.COUNTRY
     ] = "Georgia (country)"  # not the state
@@ -299,15 +301,15 @@ def get_n_largest_US_states(df, n):
 
 
 df = join_dfs()
-largest_US_states = get_n_largest_US_states(df, 3)
+largest_US_states = get_n_largest_US_states(df, 2)
 
 df = df.groupby(Columns.LOCATION_NAME).filter(
-    # Exclude US states (unless they meet certain criteria, see below) and
+    # Exclude smaller US states;
+    # keep top n US states by current number of confirmed cases
     lambda g: g[Columns.COUNTRY].iloc[0] != Locations.US
     or (
-        # Keep top n US states by current number of confirmed cases
         g.loc[g[Columns.CASE_TYPE] == CaseTypes.CONFIRMED, Columns.CASE_COUNT].iloc[-1]
-        >= largest_US_states.iloc[-1]
+        >= largest_US_states.min()
     )
 )
 
@@ -315,15 +317,15 @@ df = df.groupby(Columns.LOCATION_NAME).filter(
 plot_countries(
     df,
     [
-        # "China",
-        "Italy",
-        "Iran",
-        "France",
-        "Spain",
-        "Germany",
-        # "United Kingdom",
-        "South Korea",
-        "US",
+        # Locations.CHINA,
+        Locations.ITALY,
+        Locations.FRANCE,
+        Locations.SPAIN,
+        Locations.GERMANY,
+        Locations.IRAN,
+        Locations.UK,
+        Locations.SOUTH_KOREA,
+        Locations.US,
     ],
     start_date="2020-2-20",
     include_recovered=False,
