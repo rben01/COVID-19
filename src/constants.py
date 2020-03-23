@@ -25,3 +25,5 @@ class CaseTypes:
 
 class Strings:
     WORLD = "World"
+    WORLD_MINUS_CHINA = "Non-China"
+    CHINA = "China"
