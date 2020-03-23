@@ -2,7 +2,7 @@
 import itertools
 from collections import namedtuple
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,19 +16,26 @@ from constants import CaseTypes, Columns, Paths, Strings
 
 DATA_PATH = Paths.ROOT / "csse_covid_19_data" / "csse_covid_19_time_series"
 
+CASE_TYPE_NAMES = "name"
+DASH_STYLE = "dash_style"
+INCLUDE = "include"
+PerCaseTypeConfig = namedtuple(
+    "PerCaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE]
+)
 
-# TODO: Dedupe everything in here, I literally copied and pasted
-def plot_world_and_china(df, *, style=None, start_date=None):
+
+def _plot_helper(
+    df: pd.DataFrame,
+    *,
+    style=None,
+    filter_df_func,
+    palette=None,
+    config: List[PerCaseTypeConfig],
+    plot_size: Tuple[float],
+):
     plt.subplots()
-    df = df[
-        df[Columns.LOCATION_NAME].isin(
-            [Strings.WORLD, Strings.WORLD_MINUS_CHINA, "China"]
-        )
-        & (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED)
-    ]
 
-    if start_date is not None:
-        df = df[df[Columns.DATE] >= pd.Timestamp(start_date)]
+    df = filter_df_func(df)
 
     current_case_counts = (
         df.groupby(Columns.LOCATION_NAME).apply(
@@ -54,16 +61,6 @@ def plot_world_and_china(df, *, style=None, start_date=None):
 
     hue_order = current_case_counts[Columns.LOCATION_NAME]
 
-    CASE_TYPE_NAMES = "name"
-    DASH_STYLE = "dash_style"
-    INCLUDE = "include"
-    PerCaseTypeConfig = namedtuple(
-        "PerCaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE]
-    )
-    config = [
-        PerCaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0), include=True),
-        PerCaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1), include=True),
-    ]
     config_df = pd.DataFrame(config)
     config_df = config_df[config_df[INCLUDE]]
     legend_fields = [*config_df[CASE_TYPE_NAMES], CaseTypes.MORTALITY]
@@ -98,13 +95,14 @@ def plot_world_and_china(df, *, style=None, start_date=None):
         ax.yaxis.set_minor_formatter(NullFormatter())
 
         # Configure design
-        plt.gcf().set_size_inches((9, 9))
+        plt.gcf().set_size_inches(plot_size)
         for line in g.lines:
             line.set_linewidth(3)
         for tick in ax.get_xticklabels():
             tick.set_rotation(80)
         ax.grid(b=True, which="both", axis="both")
-        legend = plt.legend(loc="bottom right", framealpha=0.9)
+        legend = plt.legend(loc="best", framealpha=0.9)
+        plt.gcf().set_facecolor("white")
 
         # Add case counts of the different categories to the legend (next few blocks)
         sep_str = " / "
@@ -133,50 +131,38 @@ def plot_world_and_china(df, *, style=None, start_date=None):
             text.set_text(label)
 
 
+def plot_world_and_china(df, *, style=None, start_date=None):
+    def filter_func(df):
+        return df[
+            df[Columns.LOCATION_NAME].isin(
+                [Strings.WORLD, Strings.WORLD_MINUS_CHINA, "China"]
+            )
+            & (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED)
+            & (df[Columns.DATE] >= pd.Timestamp(start_date))
+        ]
+
+    config = [
+        PerCaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0), include=True),
+        PerCaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1), include=True),
+    ]
+
+    plot_size = (9, 9)
+
+    return _plot_helper(
+        df, style=style, filter_df_func=filter_func, config=config, plot_size=plot_size
+    )
+
+
 def plot_countries(
     df, countries, *, style=None, start_date=None, include_recovered=False
 ):
-    plt.subplots()
+    def filter_func(df):
+        return df[
+            df[Columns.COUNTRY].isin(countries)
+            & (df[Columns.DATE] >= pd.Timestamp(start_date))
+            & (include_recovered | (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED))
+        ]
 
-    countries = set(countries)
-    df = df[df[Columns.COUNTRY].isin(countries)]
-
-    if start_date is not None:
-        df = df[df[Columns.DATE] >= pd.Timestamp(start_date)]
-
-    if not include_recovered:
-        df = df[df[Columns.CASE_TYPE] != CaseTypes.RECOVERED]
-
-    current_case_counts = (
-        df.groupby(Columns.LOCATION_NAME).apply(
-            lambda g: pd.Series(
-                {
-                    Columns.LOCATION_NAME: g.name,
-                    # Get last case count of each case type for each location
-                    **g.groupby(Columns.CASE_TYPE)[Columns.CASE_COUNT]
-                    # .tail(1).sum() is a hack to get the last value if it exists else 0
-                    .apply(lambda h: h.tail(1).sum()).to_dict(),
-                }
-            )
-        )
-        # Order locations by decreasing current confirmed case count
-        # This is used to keep plot legend in sync with the order of lines on the graph
-        # so the location with the most current cases is first in the legend and the
-        # least is last
-        .sort_values(CaseTypes.CONFIRMED, ascending=False)
-    )
-    current_case_counts[CaseTypes.MORTALITY] = (
-        current_case_counts[CaseTypes.DEATHS] / current_case_counts[CaseTypes.CONFIRMED]
-    )
-
-    hue_order = current_case_counts[Columns.LOCATION_NAME]
-
-    CASE_TYPE_NAMES = "name"
-    DASH_STYLE = "dash_style"
-    INCLUDE = "include"
-    PerCaseTypeConfig = namedtuple(
-        "PerCaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE]
-    )
     config = [
         PerCaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0), include=True),
         PerCaseTypeConfig(
@@ -186,87 +172,12 @@ def plot_countries(
         ),
         PerCaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1), include=True),
     ]
-    config_df = pd.DataFrame(config)
-    config_df = config_df[config_df[INCLUDE]]
-    legend_fields = [*config_df[CASE_TYPE_NAMES], CaseTypes.MORTALITY]
 
-    style = style or "default"
-    with plt.style.context(style):
-        g = sns.lineplot(
-            data=df,
-            x=Columns.DATE,
-            y=Columns.CASE_COUNT,
-            hue=Columns.LOCATION_NAME,
-            hue_order=hue_order,
-            style=Columns.CASE_TYPE,
-            style_order=config_df[CASE_TYPE_NAMES].tolist(),
-            dashes=config_df[DASH_STYLE].tolist(),
-            palette=None,
-        )
+    plot_size = (12, 12)
 
-        # Configure axes and ticks
-        ax = plt.gca()
-        ax: plt.Axes
-        ax.set_ylim(bottom=1)
-        ax.set_yscale("log", basey=2, nonposy="mask")
-        ax.xaxis.set_minor_locator(DayLocator())
-        ax.xaxis.set_major_formatter(DateFormatter("%b %-d"))
-        ax.yaxis.set_major_locator(LogLocator(base=2, numticks=1000))
-        ax.yaxis.set_major_formatter(ScalarFormatter())
-        ax.yaxis.set_minor_locator(
-            # 6-2 = 4 minor ticks between each pair of major ticks
-            LogLocator(base=2, subs=np.linspace(0.5, 1, 6)[1:-1], numticks=1000)
-        )
-        ax.yaxis.set_minor_formatter(NullFormatter())
-
-        # Configure design
-        plt.gcf().set_size_inches((12, 12))
-        for line in g.lines:
-            line.set_linewidth(3)
-        for tick in ax.get_xticklabels():
-            tick.set_rotation(80)
-        ax.grid(b=True, which="both", axis="both")
-        legend = plt.legend(loc="upper left", framealpha=0.9)
-
-        # Add case counts of the different categories to the legend (next few blocks)
-        sep_str = " / "
-        left_str = " ("
-        right_str = ")"
-
-        # Add number format to legend title (the first text in the legend)
-        fmt_str = sep_str.join(legend_fields)
-        next(iter(legend.texts)).set_text(f"Location{left_str}{fmt_str}{right_str}")
-
-        # Add case counts to legend labels (first label is title, so skip it)
-        case_count_str_cols = [
-            current_case_counts[col].map(r"{:,}".format)
-            for col in config_df[CASE_TYPE_NAMES]
-        ]
-        case_count_str_cols.append(
-            current_case_counts[CaseTypes.MORTALITY].map(r"{0:.2%}".format)
-        )
-        labels = (
-            current_case_counts[Columns.LOCATION_NAME]
-            + left_str
-            + case_count_str_cols[0].str.cat(case_count_str_cols[1:], sep=sep_str)
-            + right_str
-        )
-        for text, label in zip(itertools.islice(legend.texts, 1, None), labels):
-            text.set_text(label)
-
-        # Add worldwide case count to right y axis
-        # wwcc_ax = ax.twinx()
-        # wwcc_ax: plt.Axes
-        # wwcc_ax.scatter(
-        #     x=worldwide_case_count[Columns.DATE],
-        #     y=worldwide_case_count[Columns.CASE_COUNT],
-        #     c="black",
-        #     marker="o",
-        # )
-        # wwcc_ax.set_ylabel("Worldwide Cases")
-
-        # wwcc_ax.set_yscale("log", basey=10, nonposy="mask")
-        # wwcc_ax.yaxis.set_major_formatter(ScalarFormatter())
+    _plot_helper(
+        df, style=style, filter_df_func=filter_func, config=config, plot_size=plot_size
+    )
 
 
 def get_country_cases_df(filepath: Path, *, case_type: str):
