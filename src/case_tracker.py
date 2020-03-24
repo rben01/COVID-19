@@ -233,7 +233,9 @@ def get_country_cases_df(filepath: Path, *, case_type: str):
     )
     df[Columns.DATE] = pd.to_datetime(df[Columns.DATE])
     df[Columns.CASE_TYPE] = case_type
-    df[Columns.CASE_COUNT] = df[Columns.CASE_COUNT].str.replace(",", "").astype(int)
+    df[Columns.CASE_COUNT] = (
+        df[Columns.CASE_COUNT].str.replace(",", "").fillna(0).astype(int)
+    )
 
     return df
 
