@@ -1,9 +1,8 @@
 # %%
 import itertools
-from collections import namedtuple
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Mapping, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,15 +17,16 @@ from constants import CaseTypes, Columns, Locations, Paths
 
 DATA_PATH = Paths.ROOT / "csse_covid_19_data" / "csse_covid_19_time_series"
 
-CASE_TYPE_NAMES = "name"
-DASH_STYLE = "dash_style"
-INCLUDE = "include"
-CaseTypeConfig = namedtuple(
-    "CaseTypeConfig", [CASE_TYPE_NAMES, DASH_STYLE, INCLUDE], defaults=[True]
-)
-
 rcParams["font.family"] = "Arial"
 rcParams["font.size"] = 16
+
+
+class ConfigFields:
+    CASE_TYPE = "name"
+    DASH_STYLE = "dash_style"
+    INCLUDE = "include"
+
+    fields_set = set([CASE_TYPE, DASH_STYLE, INCLUDE])
 
 
 def _plot_helper(
@@ -34,7 +34,7 @@ def _plot_helper(
     *,
     style=None,
     palette=None,
-    case_type_config_list: List[CaseTypeConfig],
+    case_type_config_list: List[Mapping],
     plot_size: Tuple[float],
     filename,
     location_heading=None,
@@ -74,8 +74,12 @@ def _plot_helper(
 
     hue_order = current_case_counts[Columns.LOCATION_NAME]
 
-    config_df = pd.DataFrame(case_type_config_list)
-    config_df = config_df[config_df[INCLUDE]]
+    for d in case_type_config_list:
+        d.setdefault(ConfigFields.INCLUDE, True)
+        assert set(d.keys()) == ConfigFields.fields_set
+
+    config_df = pd.DataFrame.from_records(case_type_config_list)
+    config_df = config_df[config_df[ConfigFields.INCLUDE]]
 
     style = style or "default"
     with plt.style.context(style):
@@ -86,8 +90,8 @@ def _plot_helper(
             hue=Columns.LOCATION_NAME,
             hue_order=hue_order,
             style=Columns.CASE_TYPE,
-            style_order=config_df[CASE_TYPE_NAMES].tolist(),
-            dashes=config_df[DASH_STYLE].tolist(),
+            style_order=config_df[ConfigFields.CASE_TYPE].tolist(),
+            dashes=config_df[ConfigFields.DASH_STYLE].tolist(),
             palette=None,
         )
 
@@ -123,7 +127,7 @@ def _plot_helper(
         right_str = ")"
 
         # Add number format to legend title (the first item in the legend)
-        legend_fields = [*config_df[CASE_TYPE_NAMES], CaseTypes.MORTALITY]
+        legend_fields = [*config_df[ConfigFields.CASE_TYPE], CaseTypes.MORTALITY]
         fmt_str = sep_str.join(legend_fields)
         if location_heading is None:
             location_heading = Columns.LOCATION_NAME
@@ -135,7 +139,7 @@ def _plot_helper(
         # Add case counts to legend labels (first label is title, so skip it)
         case_count_str_cols = [
             current_case_counts[col].map(r"{:,}".format)
-            for col in config_df[CASE_TYPE_NAMES]
+            for col in config_df[ConfigFields.CASE_TYPE]
         ]
         case_count_str_cols.append(
             current_case_counts[CaseTypes.MORTALITY].map(r"{0:.2%}".format)
@@ -165,8 +169,8 @@ def plot_world_and_china(df: pd.DataFrame, *, style=None, start_date=None):
     ]
 
     configs = [
-        CaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0)),
-        CaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1)),
+        {ConfigFields.CASE_TYPE: CaseTypes.CONFIRMED, ConfigFields.DASH_STYLE: (1, 0)},
+        {ConfigFields.CASE_TYPE: CaseTypes.DEATHS, ConfigFields.DASH_STYLE: (1, 1,)},
     ]
 
     plot_size = (12, 12)
@@ -190,13 +194,13 @@ def plot_regions(
     df = df[(include_recovered | (df[Columns.CASE_TYPE] != CaseTypes.RECOVERED))]
 
     configs = [
-        CaseTypeConfig(name=CaseTypes.CONFIRMED, dash_style=(1, 0)),
-        CaseTypeConfig(
-            name=CaseTypes.RECOVERED,
-            dash_style=(3, 3, 1, 3),
-            include=include_recovered,
-        ),
-        CaseTypeConfig(name=CaseTypes.DEATHS, dash_style=(1, 1)),
+        {ConfigFields.CASE_TYPE: CaseTypes.CONFIRMED, ConfigFields.DASH_STYLE: (1, 0)},
+        {
+            ConfigFields.CASE_TYPE: CaseTypes.RECOVERED,
+            ConfigFields.DASH_STYLE: (3, 3, 1, 3),
+            ConfigFields.INCLUDE: include_recovered,
+        },
+        {ConfigFields.CASE_TYPE: CaseTypes.DEATHS, ConfigFields.DASH_STYLE: (1, 1)},
     ]
 
     plot_size = (12, 12)
