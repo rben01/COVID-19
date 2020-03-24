@@ -3,7 +3,7 @@ import enum
 import itertools
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Tuple, Set
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,6 +26,37 @@ class ConfigFields(enum.Enum):
     CASE_TYPE = enum.auto()
     DASH_STYLE = enum.auto()
     INCLUDE = enum.auto()
+
+    # https://docs.python.org/3/library/enum.html#omitting-values
+    def __repr__(self):
+        return "<%s.%s>" % (self.__class__.__name__, self.name)
+
+    @classmethod
+    def validate_fields(cls, fields):
+        given_fields = set(fields)
+        expected_fields = set(cls)
+        given_fields: Set[ConfigFields]
+        expected_fields: Set[ConfigFields]
+
+        if given_fields == expected_fields:
+            return
+
+        missing_fields = list(expected_fields.difference(given_fields))
+        unexpected_fields = list(given_fields.difference(expected_fields))
+
+        err_str_components = []
+        if missing_fields:
+            err_str_components.append(
+                f"missing {len(missing_fields)} expected field(s) {missing_fields}"
+            )
+        if unexpected_fields:
+            err_str_components.append(
+                f"{len(unexpected_fields)} unexpected field(s) {unexpected_fields}"
+            )
+        err_str_components.append(f"given {fields}")
+        err_str = "; ".join(err_str_components)
+        err_str = err_str[0].upper() + err_str[1:]
+        raise ValueError(err_str)
 
 
 def _plot_helper(
@@ -73,9 +104,10 @@ def _plot_helper(
 
     hue_order = current_case_counts[Columns.LOCATION_NAME]
 
-    for d in case_type_config_list:
-        d.setdefault(ConfigFields.INCLUDE, True)
-        assert set(d.keys()) == set(ConfigFields)
+    # Apply default config and validate resulting dicts
+    for config_dict in case_type_config_list:
+        config_dict.setdefault(ConfigFields.INCLUDE, True)
+        ConfigFields.validate_fields(config_dict)
 
     config_df = pd.DataFrame.from_records(case_type_config_list)
     config_df = config_df[config_df[ConfigFields.INCLUDE]]
