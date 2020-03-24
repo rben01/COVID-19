@@ -1,4 +1,5 @@
 # %%
+import enum
 import itertools
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,13 +21,11 @@ DATA_PATH = Paths.ROOT / "csse_covid_19_data" / "csse_covid_19_time_series"
 rcParams["font.family"] = "Arial"
 rcParams["font.size"] = 16
 
-
-class ConfigFields:
-    CASE_TYPE = "name"
-    DASH_STYLE = "dash_style"
-    INCLUDE = "include"
-
-    fields_set = set([CASE_TYPE, DASH_STYLE, INCLUDE])
+# Contains fields used to do per-series configuration when plotting
+class ConfigFields(enum.Enum):
+    CASE_TYPE = enum.auto()
+    DASH_STYLE = enum.auto()
+    INCLUDE = enum.auto()
 
 
 def _plot_helper(
@@ -76,7 +75,7 @@ def _plot_helper(
 
     for d in case_type_config_list:
         d.setdefault(ConfigFields.INCLUDE, True)
-        assert set(d.keys()) == ConfigFields.fields_set
+        assert set(d.keys()) == set(ConfigFields)
 
     config_df = pd.DataFrame.from_records(case_type_config_list)
     config_df = config_df[config_df[ConfigFields.INCLUDE]]
